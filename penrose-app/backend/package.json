@@ -1,0 +1,9 @@
+{
+  "name": "penrose-backend-runner",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@penrose/core": "latest",
+    "jsdom": "^26.1.0"
+  }
+}
