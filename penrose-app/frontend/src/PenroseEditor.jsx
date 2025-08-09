@@ -65,7 +65,6 @@ export default function PenroseEditor() {
   const [domain, setDomain] = useState(defaultDomain);
   const [substance, setSubstance] = useState(defaultSubstance);
   const [style, setStyle] = useState(defaultStyle);
-  const [variation, setVariation] = useState('test');
   const [svg, setSvg] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -81,7 +80,7 @@ export default function PenroseEditor() {
       const res = await fetch('/api/render/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain, substance, style, variation }),
+        body: JSON.stringify({ domain, substance, style }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Render failed');
@@ -124,10 +123,7 @@ export default function PenroseEditor() {
 
   return (
     <div style={{ padding: 20 }}>
-      <h1>Penrose Render Demo</h1>
       <div style={{ marginBottom: 12 }}>
-        <label>Variation</label>{' '}
-        <input value={variation} onChange={e => setVariation(e.target.value)} />{' '}
         <button onClick={handleRender} disabled={loading}>
           {loading ? 'Rendering...' : 'Render'}
         </button>
