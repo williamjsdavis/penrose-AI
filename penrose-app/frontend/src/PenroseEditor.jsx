@@ -184,6 +184,7 @@ export default function PenroseEditor() {
   const [activeTab, setActiveTab] = useState('substance');
 
   const [imageUrl, setImageUrl] = useState(null);
+  const [generating, setGenerating] = useState(false);
   const fileInputRef = useRef(null);
 
   async function handleRender() {
@@ -205,6 +206,33 @@ export default function PenroseEditor() {
     }
   }
 
+  async function handleGenerateFromImage() {
+    if (!imageUrl) {
+      setError('Please upload an image first.');
+      return;
+    }
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/generate-substance/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_url: imageUrl }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Generation failed');
+      if (!json.substance) throw new Error('No substance returned');
+      setSubstance(json.substance);
+      // Auto-render after setting substance
+      await handleRender();
+      setActiveTab('substance');
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   // rest of component remains unchanged...
   const commonProps = { rows: 16, cols: 100, style: { width: '100%', fontFamily: 'monospace', padding: 8 } };
   function renderEditorArea() {
@@ -219,9 +247,12 @@ export default function PenroseEditor() {
 
   return (
     <div style={{ padding: 20 }}>
-      <div style={{ marginBottom: 12 }}>
+      <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
         <button onClick={handleRender} disabled={loading}>
           {loading ? 'Rendering...' : 'Render'}
+        </button>
+        <button onClick={handleGenerateFromImage} disabled={generating || !imageUrl}>
+          {generating ? 'Generating with GPT‑5...' : 'Generate Substance from Image (GPT‑5)'}
         </button>
       </div>
 
