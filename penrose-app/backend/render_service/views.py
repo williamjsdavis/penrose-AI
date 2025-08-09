@@ -2,8 +2,10 @@ import tempfile
 import subprocess
 import os
 import json
+from uuid import uuid4
 from django.http import JsonResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
 
 
 @csrf_exempt
@@ -61,3 +63,27 @@ def render_penrose(request):
 
         svg = p.stdout
         return JsonResponse({"svg": svg})
+
+
+@csrf_exempt
+def upload_image(request):
+    if request.method != "POST":
+        return HttpResponseBadRequest("POST required")
+
+    if not request.FILES or "image" not in request.FILES:
+        return HttpResponseBadRequest("No image provided")
+
+    image = request.FILES["image"]
+    ext = os.path.splitext(image.name)[1].lower()
+    if ext not in [".png", ".jpg", ".jpeg", ".webp"]:
+        return HttpResponseBadRequest("Unsupported file type")
+
+    os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
+    filename = f"upload_{uuid4().hex}{ext}"
+    save_path = os.path.join(settings.MEDIA_ROOT, filename)
+    with open(save_path, "wb") as f:
+        for chunk in image.chunks():
+            f.write(chunk)
+
+    url = f"{settings.MEDIA_URL}{filename}"
+    return JsonResponse({"url": url})
