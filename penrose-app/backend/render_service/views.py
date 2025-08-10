@@ -122,6 +122,34 @@ def _parse_json_output(text: str) -> dict:
             return {}
 
 
+def _redact_content_for_logging(content_list):
+    """Return a deep-copied list with data URLs redacted to avoid huge logs/secrets."""
+    safe = []
+    for item in content_list:
+        if isinstance(item, dict):
+            new_item = dict(item)
+            if new_item.get("type") == "input_image":
+                img = new_item.get("image_url")
+                if isinstance(img, str) and img.startswith("data:image"):
+                    new_item["image_url"] = (
+                        f"data:image/*;base64,[redacted len={len(img)}]"
+                    )
+            safe.append(new_item)
+        else:
+            safe.append(item)
+    return safe
+
+
+def _dump_json_safe(obj, limit=10000):
+    try:
+        payload = json.dumps(obj, default=lambda o: getattr(o, "__dict__", str(o)))
+    except Exception:
+        payload = str(obj)
+    if len(payload) > limit:
+        return payload[:limit] + "... [truncated]"
+    return payload
+
+
 @csrf_exempt
 def render_penrose(request):
     if request.method != "POST":
@@ -269,24 +297,38 @@ def generate_substance(request):
 
     client = OpenAI(api_key=api_key)
 
+    user_content = [
+        {"type": "input_text", "text": instructions},
+        {"type": "input_image", "image_url": data_url},
+    ]
+
+    # Log outgoing request (with redacted data URL)
+    safe_request = {
+        "model": "gpt-5-nano",
+        "input": [
+            {"role": "user", "content": _redact_content_for_logging(user_content)}
+        ],
+        "text": {"format": {"type": "json_object"}},
+    }
+    print(
+        "[openai-request]", _dump_json_safe(safe_request), file=sys.stderr, flush=True
+    )
+
     try:
         resp = client.responses.create(
-            model="gpt-5",
-            input=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "input_text", "text": instructions},
-                        {"type": "input_image", "image_url": data_url},
-                    ],
-                }
-            ],
+            model="gpt-5-nano",
+            input=[{"role": "user", "content": user_content}],
             text={"format": {"type": "json_object"}},
         )
     except Exception as e:
         return JsonResponse({"error": f"OpenAI API error: {e}"}, status=502)
 
+    # Log raw response and extracted text
+    print("[openai-response]", _dump_json_safe(resp), file=sys.stderr, flush=True)
+
     text = _extract_output_text(resp)
+    print("[openai-response-text]", _dump_json_safe(text), file=sys.stderr, flush=True)
+
     trio = _parse_json_output(text)
     domain_out = (trio.get("domain") or "").strip()
     substance_out = (trio.get("substance") or "").strip()
