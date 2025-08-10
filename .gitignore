@@ -1,0 +1,38 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+*.log
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Django / project-specific
+penrose-app/backend/db.sqlite3
+penrose-app/backend/media/
+penrose-app/backend/venv/
+
+# Node / Vite
+node_modules/
+dist/
+.vite/
+.eslintcache
+
+# Env files
+.env
+.env.local
+.env.*.local
+
+# IDE/editor
+.vscode/
+.idea/ 
