@@ -254,7 +254,7 @@ export default function PenroseEditor() {
           {loading ? 'Rendering...' : 'Render'}
         </button>
         <button onClick={handleGenerateFromImage} disabled={generating || !imageUrl}>
-          {generating ? 'Generating with GPT‑5...' : 'Generate Substance from Image (GPT‑5)'}
+          {generating ? 'Generating with GPT‑5...' : 'Generate from Image (GPT‑5)'}
         </button>
       </div>
 
