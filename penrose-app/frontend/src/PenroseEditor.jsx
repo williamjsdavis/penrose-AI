@@ -221,9 +221,11 @@ export default function PenroseEditor() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Generation failed');
-      if (!json.substance) throw new Error('No substance returned');
-      setSubstance(json.substance);
-      // Auto-render after setting substance
+      const { domain: d, substance: s, style: st } = json;
+      if (!d || !s || !st) throw new Error('Incomplete trio from model');
+      setDomain(d);
+      setSubstance(s);
+      setStyle(st);
       await handleRender();
       setActiveTab('substance');
     } catch (err) {

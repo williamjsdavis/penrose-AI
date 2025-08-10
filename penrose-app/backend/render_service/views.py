@@ -9,9 +9,18 @@ from django.conf import settings
 import base64
 import io
 from urllib.parse import urlparse
+import sys
 
 from PIL import Image
 from openai import OpenAI
+
+# Load external prompt guidance if present
+_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "prompt_guidance.txt")
+try:
+    with open(_PROMPT_PATH, "r", encoding="utf-8") as _f:
+        PROMPT_GUIDANCE = _f.read().strip()
+except Exception:
+    PROMPT_GUIDANCE = ""
 
 # Default Domain DSL used to constrain model output
 DEFAULT_DOMAIN_DSL = """
@@ -97,6 +106,22 @@ def _sanitize_substance(text: str) -> str:
     return stripped
 
 
+def _parse_json_output(text: str) -> dict:
+    """Parse model output as JSON and return dict with domain/substance/style if present."""
+    try:
+        data = json.loads(text)
+        if not isinstance(data, dict):
+            raise ValueError("Top-level JSON is not an object")
+        return data
+    except Exception:
+        # Try to strip code fences or surrounding text
+        cleaned = _sanitize_substance(text)
+        try:
+            return json.loads(cleaned)
+        except Exception:
+            return {}
+
+
 @csrf_exempt
 def render_penrose(request):
     if request.method != "POST":
@@ -139,6 +164,11 @@ def render_penrose(request):
                 env=env,
             )
         except subprocess.TimeoutExpired:
+            print(
+                "[penrose-render-timeout] Rendering timed out",
+                file=sys.stderr,
+                flush=True,
+            )
             return JsonResponse({"error": "Rendering timed out"}, status=504)
 
         if p.returncode != 0:
@@ -146,6 +176,13 @@ def render_penrose(request):
                 info = json.loads((p.stderr or "").strip())
             except Exception:
                 info = {"stderr": p.stderr}
+            # Log to server stderr for debugging
+            print(
+                "[penrose-render-error]",
+                json.dumps(info)[:5000],
+                file=sys.stderr,
+                flush=True,
+            )
             return JsonResponse(
                 {"error": "Penrose render failed", "info": info}, status=400
             )
@@ -211,14 +248,17 @@ def generate_substance(request):
 
     instructions = (
         "You are given an image of a mathematical/diagrammatic scene. "
-        "Generate ONLY a Penrose Substance DSL program that, when paired with the provided domain and style, "
-        "produces a diagram that closely matches the image.\n\n"
+        "Generate a Penrose program as three components: domain, substance, and style.\n\n"
+        "Output format (STRICT): Return ONLY a single JSON object with exactly these keys, all values as strings:\n"
+        '{"domain": "string", "substance": "string", "style": "string"}.\n'
+        "Do not include markdown code fences, backticks, or any commentary.\n\n"
         "Constraints:\n"
-        "- Use ONLY the constructs available in the following domain DSL (types, constructors, functions, predicates).\n"
-        "- Aim for a balance between simplicity and fidelity; avoid overly complex object counts if not necessary.\n"
-        "- Do NOT perform OCR or extract literal text from the image; use unlabeled or simple labels where needed.\n"
-        "- Output ONLY the Substance DSL text with no explanations and no code fences.\n\n"
-        "Domain DSL:\n" + DEFAULT_DOMAIN_DSL
+        "- Aim for expressive but correct output. Keep Substance declarative; put visual details in Style.\n"
+        "- If you reuse an existing domain, you may still return a minimal domain string that is consistent.\n"
+        "- Avoid OCR; do not copy literal text from the image.\n\n"
+        + (PROMPT_GUIDANCE + "\n\n" if PROMPT_GUIDANCE else "")
+        + "Current default Domain (for context, you may reuse/extend consistently):\n"
+        + DEFAULT_DOMAIN_DSL
     )
 
     api_key = os.environ.get("OPENAI_API_KEY")
@@ -241,13 +281,23 @@ def generate_substance(request):
                     ],
                 }
             ],
+            text={"format": {"type": "json_object"}},
         )
     except Exception as e:
         return JsonResponse({"error": f"OpenAI API error: {e}"}, status=502)
 
     text = _extract_output_text(resp)
-    substance = _sanitize_substance(text)
-    if not substance:
-        return JsonResponse({"error": "Model returned empty result"}, status=502)
+    trio = _parse_json_output(text)
+    domain_out = (trio.get("domain") or "").strip()
+    substance_out = (trio.get("substance") or "").strip()
+    style_out = (trio.get("style") or "").strip()
 
-    return JsonResponse({"substance": substance})
+    if not (domain_out and substance_out and style_out):
+        return JsonResponse(
+            {"error": "Model did not return valid JSON with domain/substance/style"},
+            status=502,
+        )
+
+    return JsonResponse(
+        {"domain": domain_out, "substance": substance_out, "style": style_out}
+    )

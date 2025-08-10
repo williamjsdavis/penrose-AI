@@ -1,0 +1,127 @@
+When generating Penrose DSL, follow these rules exactly and produce three files when needed: a Domain (`.domain`), a Substance (`.substance`), and a Style (`.style`). Use the notation and keywords of Penrose (types, `predicate`, `constructor`, `notation`, `forall`, `where`, `ensure`, `encourage`, `?` for pending values, field assignment, `override`, etc.). Keep Substance purely declarative (no coordinates), keep all visual details in Style, and keep domain-level type signatures in Domain. (Penrose intentionally separates Domain / Substance / Style; this is required to compile and to get the layout solver to work). ([penrose.cs.cmu.edu][1])&#x20;
+
+1. **High-level rules for correct, robust generation**
+
+* Always produce a Domain schema when you introduce new types, functions, or predicates. Domain must declare `type` lines, `function` signatures, `predicate` signatures, and optionally `constructor` and `notation` lines.&#x20;
+* Substance must only declare objects and logical relationships (object declarations, assignments like `x := ...`, and predicate applications). Do **not** include absolute positions, colors, or coordinates in Substance. ([penrose.cs.cmu.edu][1])
+* Style maps Substance objects to visual primitives, using selectors (`forall Type v`, optional `where` clauses), assigning fields, using pending values `?` for quantities solved by the optimizer, and `ensure` (hard constraints) / `encourage` (soft objectives). Use cascading and `override` to refine styles. ([penrose.cs.cmu.edu][2])
+* Use pending values (`?`) for positions/sizes you want the solver to choose; use `ensure` for hard constraints (e.g., containment, perpendicularity) and `encourage` for layout preferences (e.g., label proximity).&#x20;
+* When matching particular relationships in Style, prefer `forall ... where Predicate(...) { ... }` rather than trying to pattern-match raw text. Selectors match the typed AST (not string patterns).&#x20;
+
+2. **Short working examples (copy-pasteable)**
+
+A. Minimal **Set** example (Domain / Substance / Style) — the simplest complete program:
+
+```
+# file: Sets.domain
+type Set
+predicate Subset(Set a, Set b)
+```
+
+```
+# file: Sets.substance
+Set A, B, C
+Subset(B, A)
+Subset(C, B)
+```
+
+```
+# file: Sets.style
+canvas { width = 800; height = 700 }
+
+forall Set x {
+  x.icon = Circle { strokeWidth : 0.0 }
+  ensure x.icon.r > 25             # keep circle sizes reasonable
+}
+
+forall Set s, Set t
+where Subset(s, t) {
+  ensure contains(s.icon, t.icon, 5.0)  # s contained inside t (margin 5)
+  s.icon above t.icon
+}
+```
+
+Notes: `contains()` and `greaterThan` are built-in constraints; `ensure` becomes a hard constraint in the optimization problem. ([penrose.cs.cmu.edu][2])
+
+B. Minimal **Vector** example (from the paper’s running example — good for showing `where`, `encourage`, pending `?`, and `ensure` semantics):
+
+```
+# file: LinearAlgebra.domain
+type VectorSpace
+type Vector
+function add: Vector * Vector -> Vector
+predicate In(Vector v, VectorSpace s)
+predicate Orthogonal(Vector v1, Vector v2)
+predicate Unit(Vector v)
+notation "v1 + v2" ~ "add(v1,v2)"
+```
+
+```
+# file: LinearAlgebra.substance
+VectorSpace X
+Vector x1, x2
+In(x1, X)
+In(x2, X)
+Unit(x1)
+Orthogonal(x1, x2)
+label x1 $x_1$
+label x2 $x_2$
+```
+
+```
+# file: LinearAlgebra.style
+forall VectorSpace U {
+  U.originX = ?
+  U.originY = ?
+  U.origin = (U.originX, U.originY)
+}
+
+forall Vector u, VectorSpace U
+where In(u, U) {
+  u.arrow = Arrow {
+    startX : U.originX
+    startY : U.originY
+    endX : ?
+    endY : ?
+    color : Colors.mediumBlue
+  }
+  u.text = Text { string : u.label, x: ?, y: ? }
+  u.start = (u.arrow.startX, u.arrow.startY)
+  u.end = (u.arrow.endX, u.arrow.endY)
+  encourage near(u.text, u.end)
+  ensure contained(u.end, U.shape)
+}
+
+forall Vector u, Vector v
+where Orthogonal(u, v) {
+  ensure equals(dot(u.end - u.start, v.end - v.start), 0.0)
+}
+```
+
+This illustrates how to leave geometric quantities as `?` and express orthogonality as an exact constraint (`ensure equals(...)`) so the solver enforces right angles.
+
+3. **Prompt guidance for GPT5 (be explicit):**
+
+* Always return code for all three files when the example needs them. If domain items already exist in the context, mention which Domain lines to reuse; otherwise produce a full Domain file.
+* Prefer small, verifiable examples (2–4 objects) that exercise the relationship/predicate you want. Small tests catch type/signature errors faster.&#x20;
+* When generating Style, **always**:
+
+  * Use `forall Type var { ... }` selectors for base icon declarations.
+  * Use `where Predicate(...)` only when the visual rule depends on a relation between objects.
+  * Use pending `?` for coordinates/sizes you expect the solver to choose.
+  * Use `ensure` for hard geometric facts (containment, equality, perpendicularity).
+  * Use `encourage` for arranging labels, spacing, and non-critical layout preferences. ([penrose.cs.cmu.edu][2])
+* When generating Domain, include `notation` lines for any user-facing sugar (e.g., `v1 ⊥ v2`), and `constructor` lines if you want types with named fields accessible from Style.&#x20;
+
+4. **Validation checklist (have the model print this after generating code):**
+
+* Run Penrose type-check: every `Substance` name matches a `type` or constructor in `Domain`. (If you cannot run the compiler inside the app, still include this check as an instruction to the user.)&#x20;
+* Style selectors must reference types/predicates that exist in Domain & Substance (no dangling `where` predicates).&#x20;
+* No absolute coordinates appear in Substance. If any coordinate appears, convert it to a `?` pending value.
+* Use a tiny example to confirm constraints are satisfiable (2–4 objects). If solver fails, print which `ensure` constraint is violated. Penrose’s solver reports constraint violations and the invalid diagram can be diagnostic.&#x20;
+
+5. **Extra advanced tips (for better output quality)**
+
+* Prefer `fields` for reusable substructures (e.g., `x.icon`, `u.arrow`) so later `override` can refine them.&#x20;
+* Use `plugins` if you need discrete expansions (e.g., sample points for a Map or random mesh generation) — the plugin runs once and may generate extra Substance lines or concrete fields. Mention plugin outputs explicitly so the Style can reference them.&#x20;
+* If the visual concept is underconstrained, add `encourage` penalties (near, sameCenter, etc.) rather than hard `ensure` constraints — this helps avoid infeasible optimization problems.&#x20;
