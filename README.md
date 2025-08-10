@@ -16,6 +16,10 @@ A small, full‑stack demo that turns images into beautiful, constraint‑based 
 - Exploring the Penrose pipeline end‑to‑end from a browser
 - Testing LLM‑assisted Penrose program generation
 
+## Demo
+
+https://github.com/user-attachments/assets/c6d7d6d9-9baa-46a8-8afb-95410d05f184
+
 ## Architecture at a glance
 
 - **Frontend**: React + Vite (`penrose-app/frontend`)
