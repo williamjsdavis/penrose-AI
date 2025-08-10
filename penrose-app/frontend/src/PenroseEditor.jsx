@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import tilingImg from './assets/penrosetilingfilled3.png';
 
 const defaultDomain = `
 type Set
@@ -185,7 +186,80 @@ export default function PenroseEditor() {
 
   const [imageUrl, setImageUrl] = useState(null);
   const [generating, setGenerating] = useState(false);
+  const [genStatus, setGenStatus] = useState('');
   const fileInputRef = useRef(null);
+
+  // Playful math phrases to show while waiting
+  const phrases = useRef([
+    'Bijecting sets',
+    'Classifying monoids',
+    'Currying functions',
+    'Finding the monad of a monoid in the category of endofunctors',
+    'Composing functors',
+    'Checking type signatures',
+    'Tensoring objects',
+    'Finding limits and colimits',
+    'Evaluating natural transformations',
+    'Completing commutative diagrams',
+    'Solving constraint systems',
+    'Balancing hard ensures and soft encourages',
+    'Searching for a tidy Substance',
+    'Rewriting with notation',
+    'Sampling a better variation',
+    'Proving this is a monad... maybe'
+  ]).current;
+
+  // Character-by-character typewriter with ellipsis cycle
+  const [typedText, setTypedText] = useState('');
+  const [phraseIndex, setPhraseIndex] = useState(0);
+  const [charIndex, setCharIndex] = useState(0);
+  const [inEllipsis, setInEllipsis] = useState(false);
+  const [ellipsisPhase, setEllipsisPhase] = useState(1); // 1..3 dots
+  const [ellipsisCycles, setEllipsisCycles] = useState(0);
+
+  useEffect(() => {
+    if (!generating) {
+      setTypedText('');
+      setCharIndex(0);
+      setInEllipsis(false);
+      setEllipsisPhase(1);
+      setEllipsisCycles(0);
+      return;
+    }
+
+    const currentPhrase = phrases[phraseIndex % phrases.length];
+
+    if (!inEllipsis) {
+      if (charIndex < currentPhrase.length) {
+        const t = setTimeout(() => {
+          setTypedText(currentPhrase.slice(0, charIndex + 1));
+          setCharIndex(charIndex + 1);
+        }, 40); // character typing speed
+        return () => clearTimeout(t);
+      } else {
+        // enter ellipsis cycle
+        setInEllipsis(true);
+        setEllipsisPhase(1);
+        setEllipsisCycles(0);
+        return;
+      }
+    } else {
+      const t = setTimeout(() => {
+        setEllipsisPhase(prev => (prev % 3) + 1); // 1,2,3,1,...
+        setEllipsisCycles(c => c + 1);
+      }, 300); // dot cadence
+      // after about ~1.8s (6 cycles at 300ms), move to next phrase
+      if (ellipsisCycles >= 6) {
+        setInEllipsis(false);
+        setCharIndex(0);
+        setTypedText('');
+        setEllipsisCycles(0);
+        setEllipsisPhase(1);
+        setPhraseIndex(i => (i + 1) % phrases.length);
+      }
+      return () => clearTimeout(t);
+    }
+  }, [generating, phraseIndex, charIndex, inEllipsis, ellipsisPhase, ellipsisCycles, phrases]);
 
   async function handleRender() {
     setLoading(true);
@@ -212,6 +286,7 @@ export default function PenroseEditor() {
       return;
     }
     setGenerating(true);
+    setGenStatus('Querying GPT-5');
     setError(null);
     try {
       const res = await fetch('/api/generate-substance/', {
@@ -228,12 +303,16 @@ export default function PenroseEditor() {
       setStyle(st);
       await handleRender();
       setActiveTab('substance');
+      setGenStatus('Finished!');
     } catch (err) {
       setError(String(err));
+      setGenStatus('');
     } finally {
       setGenerating(false);
     }
   }
+
+  const ellipsisText = inEllipsis ? '.'.repeat(ellipsisPhase) : '';
 
   // rest of component remains unchanged...
   const commonProps = { rows: 16, cols: 100, style: { width: '100%', fontFamily: 'monospace', padding: 8 } };
@@ -249,14 +328,43 @@ export default function PenroseEditor() {
 
   return (
     <div style={{ padding: 20 }}>
-      <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
+      <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
         <button onClick={handleRender} disabled={loading}>
           {loading ? 'Rendering...' : 'Render'}
         </button>
         <button onClick={handleGenerateFromImage} disabled={generating || !imageUrl}>
           {generating ? 'Generating with GPT‑5...' : 'Generate from Image (GPT‑5)'}
         </button>
+        {(generating || genStatus) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img
+              src={tilingImg}
+              alt="LLM status"
+              style={{
+                width: 28,
+                height: 28,
+                transform: generating ? 'rotate(0deg)' : undefined,
+                animation: generating ? 'spin 3s linear infinite' : 'none',
+              }}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ color: generating ? '#333' : '#2d7a2d', fontWeight: 600 }}>
+                {genStatus || 'Querying GPT-5'}
+              </span>
+              {generating && (
+                <span style={{ color: '#6b6b6b' }}>
+                  {typedText}{ellipsisText}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Inline keyframes for spin */}
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <div style={{ background: '#fff', border: '1px solid #e0dfd8', borderRadius: 8, padding: 12 }}>
