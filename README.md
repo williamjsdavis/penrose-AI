@@ -16,6 +16,12 @@ A small, full‑stack demo that turns images into beautiful, constraint‑based 
 - Exploring the Penrose pipeline end‑to‑end from a browser
 - Testing LLM‑assisted Penrose program generation
 
+### Background
+
+This app was greated at the official OpenAI GPT-5 hackathon! Read about my process in this blog post: 
+
+[Hacking with GPT-5: Generating Beautiful Diagrams at the OpenAI Hackathon](https://posgeo.wordpress.com/2025/08/14/hacking-with-gpt-5-generating-beautiful-diagrams-at-the-openai-hackathon/)
+
 ## Demo
 
 https://github.com/user-attachments/assets/c6d7d6d9-9baa-46a8-8afb-95410d05f184
